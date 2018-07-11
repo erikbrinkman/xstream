@@ -1,5 +1,5 @@
 [package]
-name = "xstream"
+name = "xstream-util"
 version = "0.1.0"
 authors = ["Erik Brinkman <erik.brinkman@gmail.com>"]
 readme = "README.md"

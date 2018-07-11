@@ -5,7 +5,7 @@ A command line tool to split a stream by a delimiter and pipe each section to a 
 ## Installation
 
 ```
-cargo install xstream
+cargo install xstream-util
 ```
 
 ## Benchmarks
