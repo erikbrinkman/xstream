@@ -1,0 +1,19 @@
+[package]
+name = "xstream"
+version = "0.1.0"
+authors = ["Erik Brinkman <erik.brinkman@gmail.com>"]
+readme = "README.md"
+homepage = "https://github.com/erikbrinkman/xstream"
+repository = "https://github.com/erikbrinkman/xstream"
+license = "MIT"
+description = "A command line tool to split a stream to child processes"
+
+[badges]
+travis-ci = { repository = "erikbrinkman/xstream" }
+
+[[bin]]
+name = "xstream"
+path = "src/main.rs"
+
+[dependencies]
+clap = "^2.32"
