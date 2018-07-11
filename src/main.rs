@@ -74,17 +74,18 @@ fn main() {
             .stdout(Stdio::inherit())
             .spawn()
             .expect("failed to start child process");
+        let mut hit_delim;
         {
             let ohandle = proc.stdin.as_mut()
                 .expect("failed to capture child processstdin");
             while {
-                let (size, hit_delim) = {
+                let size = {
                     let buf = ihandle.fill_buf().expect("failed to read from stdin");
                     let mut itr = buf.splitn(2, |&c| c == delim);
                     let dump = itr.next().unwrap();
-                    let finished = itr.next().is_some();
+                    hit_delim = itr.next().is_some();
                     ohandle.write(dump).expect("failed to pipe data to child process");
-                    (dump.len(), finished)
+                    dump.len()
                 };
                 ihandle.consume(size + (hit_delim as usize));
                 !hit_delim && size > 0
@@ -97,8 +98,7 @@ fn main() {
             None => panic!("child process was killed by a signal"),
         };
 
-        // Test if more bytes exist
-        ihandle.fill_buf().expect("failed to read from stdin").len() > 0
+        hit_delim
     } {}
 }
 
