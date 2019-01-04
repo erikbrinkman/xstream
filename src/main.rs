@@ -18,7 +18,7 @@ fn parse_character(char_str: &str) -> Result<char, &str> {
 
 fn main() {
     let matches = App::new("xstream")
-        .version("0.1")
+        .version("1.0")
         .author("Erik Brinkman <erik.brinkman@gmail.com>")
         .about("Split a stream among several processes")
         .arg(

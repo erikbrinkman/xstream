@@ -1,6 +1,6 @@
 [package]
 name = "xstream-util"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["Erik Brinkman <erik.brinkman@gmail.com>"]
 readme = "README.md"
 homepage = "https://github.com/erikbrinkman/xstream"
