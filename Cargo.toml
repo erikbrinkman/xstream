@@ -7,6 +7,7 @@ homepage = "https://github.com/erikbrinkman/xstream"
 repository = "https://github.com/erikbrinkman/xstream"
 license = "MIT"
 description = "A command line tool to split a stream to child processes"
+edition = "2018"
 
 [badges]
 travis-ci = { repository = "erikbrinkman/xstream" }

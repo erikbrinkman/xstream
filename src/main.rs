@@ -1,9 +1,7 @@
-extern crate clap;
-
 use std::io::{self, BufRead, Write};
 use std::process::{Command, Stdio};
 
-use clap::{Arg, App};
+use clap::{App, Arg};
 
 /// Parse a string as a single character
 fn parse_character(char_str: &str) -> Result<char, &str> {
@@ -23,28 +21,42 @@ fn main() {
         .version("0.1")
         .author("Erik Brinkman <erik.brinkman@gmail.com>")
         .about("Split a stream among several processes")
-        .arg(Arg::with_name("delim")
-             .short("d")
-             .long("delimiter")
-             .help("Set the delimiter between inputs. \
-                   This also accepts {\\0, \\t, \\r, \\n, and \\\\}.")
-             .default_value("\\n"))
-        .arg(Arg::with_name("null")
-             .short("0")
-             .long("null")
-             .help("Input streams are delimited by null characters (\\0) \
-                   instead of new lines.")
-             .conflicts_with("delim"))
-        .arg(Arg::with_name("command")
-             .required(true)
-             .multiple(true)
-             .help("The command to execute for each delimited stream. \
-                    It is often helpful to prefix this with \"--\" so that \
-                    other arguments are not interpreted by xstream."))
-        .after_help("xstream splits stdin by a given delimiter and pipes each \
-                     section into a new process as the stdin for that \
-                     process. For very large streams of data, this is much \
-                     more efficient than xargs.")
+        .arg(
+            Arg::with_name("delim")
+                .short("d")
+                .long("delimiter")
+                .help(
+                    "Set the delimiter between inputs. \
+                     This also accepts {\\0, \\t, \\r, \\n, and \\\\}.",
+                )
+                .default_value("\\n"),
+        )
+        .arg(
+            Arg::with_name("null")
+                .short("0")
+                .long("null")
+                .help(
+                    "Input streams are delimited by null characters (\\0) \
+                     instead of new lines.",
+                )
+                .conflicts_with("delim"),
+        )
+        .arg(
+            Arg::with_name("command")
+                .required(true)
+                .multiple(true)
+                .help(
+                    "The command to execute for each delimited stream. \
+                     It is often helpful to prefix this with \"--\" so that \
+                     other arguments are not interpreted by xstream.",
+                ),
+        )
+        .after_help(
+            "xstream splits stdin by a given delimiter and pipes each \
+             section into a new process as the stdin for that \
+             process. For very large streams of data, this is much \
+             more efficient than xargs.",
+        )
         .get_matches();
 
     // ----------------------------
@@ -58,7 +70,11 @@ fn main() {
         margs
     };
 
-    let delim_str = if matches.is_present("null") { "" } else { matches.value_of("delim").unwrap() };
+    let delim_str = if matches.is_present("null") {
+        ""
+    } else {
+        matches.value_of("delim").unwrap()
+    };
     let delim = parse_character(&delim_str).expect("invalid delimiter") as u8;
 
     // ---------
@@ -66,8 +82,9 @@ fn main() {
     // ---------
     let stdin = io::stdin();
     let mut ihandle = stdin.lock();
-    
-    while { // Covers each command invocation
+
+    while {
+        // Covers each command invocation
         let mut proc = Command::new(command)
             .args(args.iter())
             .stdin(Stdio::piped())
@@ -76,7 +93,9 @@ fn main() {
             .expect("failed to start child process");
         let mut hit_delim;
         {
-            let ohandle = proc.stdin.as_mut()
+            let ohandle = proc
+                .stdin
+                .as_mut()
                 .expect("failed to capture child processstdin");
             while {
                 let size = {
@@ -84,7 +103,9 @@ fn main() {
                     let mut itr = buf.splitn(2, |&c| c == delim);
                     let dump = itr.next().unwrap();
                     hit_delim = itr.next().is_some();
-                    ohandle.write(dump).expect("failed to pipe data to child process");
+                    ohandle
+                        .write_all(dump)
+                        .expect("failed to pipe data to child process");
                     dump.len()
                 };
                 ihandle.consume(size + (hit_delim as usize));
@@ -104,7 +125,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use parse_character;
+    use super::parse_character;
 
     #[test]
     fn parse_empty() {
