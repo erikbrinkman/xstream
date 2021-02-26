@@ -92,7 +92,7 @@ fn spawn_child(
 
 fn main() {
     let matches = App::new("xstream")
-        .version("1.0")
+        .version("1.1")
         .author("Erik Brinkman <erik.brinkman@gmail.com>")
         .about("Split a stream among several processes")
         .arg(
