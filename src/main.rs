@@ -1,7 +1,14 @@
-use std::io::{self, BufRead, Write};
-use std::process::{Command, Stdio};
+use std::collections::VecDeque;
+use std::convert::TryInto;
+use std::io::{self, BufRead, Error, ErrorKind, Write};
+use std::process::{Child, Command, Stdio};
 
 use clap::{App, Arg};
+
+/// generate io error
+fn error(msg: &'static str) -> Error {
+    Error::new(ErrorKind::Other, msg)
+}
 
 /// Parse a string as a single character
 fn parse_character(char_str: &str) -> Result<char, &str> {
@@ -14,6 +21,73 @@ fn parse_character(char_str: &str) -> Result<char, &str> {
         string if string.len() == 1 => Ok(string.as_bytes()[0] as char),
         _ => Err("could not interpret string as a character"),
     }
+}
+
+/// Wait for a process to complete, and verify it returned successfully
+// FIXME Other Kind?
+fn wait_proc(proc: &mut Child) -> Result<(), Error> {
+    match proc.wait()?.code() {
+        Some(0) => Ok(()),
+        Some(_) => Err(error("child process finished with nonzero exit code")),
+        None => Err(error("child process was killed by a signal")),
+    }
+}
+
+fn cleanup(children: &mut VecDeque<Child>) {
+    // kill everything;
+    let _ = children
+        .iter_mut()
+        .map(Child::kill)
+        .collect::<Result<(), _>>();
+    // wait for them to be cleaned up
+    let _ = children
+        .iter_mut()
+        .map(wait_proc)
+        .collect::<Result<(), _>>();
+}
+
+/// A new child process, and pipe std in up to delim to it
+fn spawn_child(
+    command: &mut Command,
+    ihandle: &mut impl BufRead,
+    delim: u8,
+    children: &mut VecDeque<Child>,
+    max_parallel: usize,
+) -> Result<bool, Error> {
+    if children.len() == max_parallel {
+        if let Some(mut proc) = children.pop_front() {
+            wait_proc(&mut proc)?
+        }
+    };
+
+    // create proc owned by children
+    children.push_back(
+        command
+            .stdin(Stdio::piped())
+            .stdout(Stdio::inherit())
+            .spawn()?,
+    );
+    let proc = children.back_mut().unwrap(); // just pushed
+    let ohandle = proc
+        .stdin
+        .as_mut()
+        .ok_or(error("failed to capture child process stdin"))?;
+
+    let mut hit_delim;
+    while {
+        let buf = ihandle.fill_buf()?;
+        let mut itr = buf.splitn(2, |&c| c == delim);
+        let dump = itr
+            .next()
+            .ok_or(error("split didn't return a single value"))?;
+        hit_delim = itr.next().is_some();
+        ohandle.write_all(dump)?;
+        let size = dump.len();
+        ihandle.consume(size + (hit_delim as usize));
+        !hit_delim && size > 0
+    } {}
+
+    Ok(hit_delim)
 }
 
 fn main() {
@@ -42,6 +116,16 @@ fn main() {
                 .conflicts_with("delim"),
         )
         .arg(
+            Arg::with_name("parallel")
+                .short("p")
+                .long("parallel")
+                .help(
+                    "run up to this many processes in parallel, specifying 0 will spawn unlimited \
+                    processes",
+                )
+                .default_value("1"),
+        )
+        .arg(
             Arg::with_name("command")
                 .required(true)
                 .multiple(true)
@@ -62,60 +146,55 @@ fn main() {
     // ----------------------------
     // Parse command line arguments
     // ----------------------------
-    let mut command_iter = matches.values_of("command").unwrap();
-    let command = command_iter.next().unwrap(); // required arg
+    let mut command_iter = matches.values_of("command").expect("command is required");
+    let command = command_iter.next().expect("command is required");
     let args: Vec<&str> = command_iter.collect();
     let delim_str = if matches.is_present("null") {
         ""
     } else {
-        matches.value_of("delim").unwrap() // arg with default value
+        matches.value_of("delim").expect("delim has default value")
     };
     let delim = parse_character(&delim_str).expect("invalid delimiter") as u8;
+    let max_parallel: usize = matches
+        .value_of("parallel")
+        .expect("parallel has default value")
+        .parse::<i64>()
+        .expect("couldn't parse parallel as integer")
+        .try_into()
+        .expect("parallel must be non-negative");
 
     // ---------
     // Main loop
     // ---------
     let stdin = io::stdin();
     let mut ihandle = stdin.lock();
+    let mut children: VecDeque<Child> = VecDeque::with_capacity(max_parallel);
 
     while {
-        // Covers each command invocation
-        let mut proc = Command::new(command)
-            .args(args.iter())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::inherit())
-            .spawn()
-            .expect("failed to start child process");
-        let mut hit_delim;
-        {
-            let ohandle = proc
-                .stdin
-                .as_mut()
-                .expect("failed to capture child process stdin");
-            while {
-                let size = {
-                    let buf = ihandle.fill_buf().expect("failed to read from stdin");
-                    let mut itr = buf.splitn(2, |&c| c == delim);
-                    let dump = itr.next().unwrap();
-                    hit_delim = itr.next().is_some();
-                    ohandle
-                        .write_all(dump)
-                        .expect("failed to pipe data to child process");
-                    dump.len()
-                };
-                ihandle.consume(size + (hit_delim as usize));
-                !hit_delim && size > 0
-            } {}
+        match spawn_child(
+            Command::new(command).args(args.iter()),
+            &mut ihandle,
+            delim,
+            &mut children,
+            max_parallel,
+        ) {
+            Ok(cont) => cont,
+            Err(err) => {
+                cleanup(&mut children);
+                panic!("problem spawning process: {}", err)
+            }
         }
-
-        match proc.wait().expect("child process never started").code() {
-            Some(0) => (),
-            Some(_) => panic!("child process finished with nonzero exit code"),
-            None => panic!("child process was killed by a signal"),
-        };
-
-        hit_delim
     } {}
+
+    // wait for all processes
+    if let Err(err) = children
+        .iter_mut()
+        .map(wait_proc)
+        .collect::<Result<(), _>>()
+    {
+        cleanup(&mut children);
+        panic!("problem waiting for process: {}", err)
+    }
 }
 
 #[cfg(test)]
