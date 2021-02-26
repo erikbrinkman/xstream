@@ -4,13 +4,11 @@ version = "1.1.0"
 authors = ["Erik Brinkman <erik.brinkman@gmail.com>"]
 readme = "README.md"
 homepage = "https://github.com/erikbrinkman/xstream"
+documentation = "https://docs.rs/xstream-util"
 repository = "https://github.com/erikbrinkman/xstream"
 license = "MIT"
 description = "A command line tool to split a stream to child processes"
 edition = "2018"
-
-[badges]
-travis-ci = { repository = "erikbrinkman/xstream" }
 
 [[bin]]
 name = "xstream"
