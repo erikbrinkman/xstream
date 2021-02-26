@@ -17,4 +17,4 @@ name = "xstream"
 path = "src/main.rs"
 
 [dependencies]
-clap = "^2.32"
+clap = "^2.33"

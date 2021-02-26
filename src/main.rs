@@ -63,17 +63,12 @@ fn main() {
     // Parse command line arguments
     // ----------------------------
     let mut command_iter = matches.values_of("command").unwrap();
-    let command = command_iter.next().unwrap();
-    let args = {
-        let mut margs = Vec::new();
-        margs.extend(command_iter);
-        margs
-    };
-
+    let command = command_iter.next().unwrap(); // required arg
+    let args: Vec<&str> = command_iter.collect();
     let delim_str = if matches.is_present("null") {
         ""
     } else {
-        matches.value_of("delim").unwrap()
+        matches.value_of("delim").unwrap() // arg with default value
     };
     let delim = parse_character(&delim_str).expect("invalid delimiter") as u8;
 
@@ -96,7 +91,7 @@ fn main() {
             let ohandle = proc
                 .stdin
                 .as_mut()
-                .expect("failed to capture child processstdin");
+                .expect("failed to capture child process stdin");
             while {
                 let size = {
                     let buf = ihandle.fill_buf().expect("failed to read from stdin");
