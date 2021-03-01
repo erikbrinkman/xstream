@@ -1,5 +1,9 @@
 # xstream
 
+[![tests](https://github.com/erikbrinkman/xstream/actions/workflows/rust.yml/badge.svg)](https://github.com/erikbrinkman/xstream/actions/workflows/rust.yml)
+[![crates.io](https://img.shields.io/crates/v/xstream-util)](https://crates.io/crates/xstream-util)
+![MIT License](https://img.shields.io/github/license/erikbrinkman/xstream)
+
 A command line tool to split a stream by a delimiter and pipe each section to a child process.
 
 ## Installation
