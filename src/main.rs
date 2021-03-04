@@ -8,7 +8,7 @@ use std::process::Command;
 use std::str;
 use xstream_util;
 
-use clap::{App, Arg};
+use clap::{crate_version, App, Arg};
 
 /// Escape delimiters in a string
 ///
@@ -51,7 +51,7 @@ fn unescape_delimiter(char_str: &str) -> String {
 
 fn main() {
     let matches = App::new("xstream")
-        .version("1.1")
+        .version(crate_version!())
         .author("Erik Brinkman <erik.brinkman@gmail.com>")
         .about("Split a stream among several processes")
         .arg(
