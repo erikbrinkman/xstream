@@ -48,5 +48,3 @@ This benchmark is a toy example, but `xstream` already provides a 60% speed up w
 - [ ] This currently only support single byte delimiters, but it shouldn't be too difficult to support multi-byte delimiters.
       After storing the delimiter, finding it should work with `buf.windows().position(|&s| s == delim`.
       The tricky part will be not writing the last `delim.len()` bytes in case the first part of delim is in them, but making sure that we do flush them if we've finished a stream.
-- [ ] Move the stream splitting into lib so that it can be tested.
-      This will be especially crucial with multi-byte delimiters.

@@ -10,9 +10,13 @@ license = "MIT"
 description = "A command line tool to split a stream to child processes"
 edition = "2018"
 
+[lib]
+name = "xstream_util"
+
 [[bin]]
 name = "xstream"
 path = "src/main.rs"
+doc = false
 
 [dependencies]
 clap = "^2.33"

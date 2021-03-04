@@ -1,14 +1,13 @@
-use std::collections::VecDeque;
+//! Command Line interface for xstream
+//!
+//! This just wraps the xstream lib in argument parsing, and character delimiter conversion
+
 use std::convert::TryInto;
-use std::io::{self, BufRead, Error, ErrorKind, Write};
-use std::process::{Child, Command, Stdio};
+use std::io;
+use std::process::Command;
+use xstream_util;
 
 use clap::{App, Arg};
-
-/// generate io error
-fn error(msg: &'static str) -> Error {
-    Error::new(ErrorKind::Other, msg)
-}
 
 /// Parse a string as a single character
 fn parse_character(char_str: &str) -> Result<char, &str> {
@@ -21,73 +20,6 @@ fn parse_character(char_str: &str) -> Result<char, &str> {
         string if string.len() == 1 => Ok(string.as_bytes()[0] as char),
         _ => Err("could not interpret string as a character"),
     }
-}
-
-/// Wait for a process to complete, and verify it returned successfully
-// FIXME Other Kind?
-fn wait_proc(proc: &mut Child) -> Result<(), Error> {
-    match proc.wait()?.code() {
-        Some(0) => Ok(()),
-        Some(_) => Err(error("child process finished with nonzero exit code")),
-        None => Err(error("child process was killed by a signal")),
-    }
-}
-
-fn cleanup(children: &mut VecDeque<Child>) {
-    // kill everything;
-    let _ = children
-        .iter_mut()
-        .map(Child::kill)
-        .collect::<Result<(), _>>();
-    // wait for them to be cleaned up
-    let _ = children
-        .iter_mut()
-        .map(wait_proc)
-        .collect::<Result<(), _>>();
-}
-
-/// A new child process, and pipe std in up to delim to it
-fn spawn_child(
-    command: &mut Command,
-    ihandle: &mut impl BufRead,
-    delim: u8,
-    children: &mut VecDeque<Child>,
-    max_parallel: usize,
-) -> Result<bool, Error> {
-    if children.len() == max_parallel {
-        if let Some(mut proc) = children.pop_front() {
-            wait_proc(&mut proc)?
-        }
-    };
-
-    // create proc owned by children
-    children.push_back(
-        command
-            .stdin(Stdio::piped())
-            .stdout(Stdio::inherit())
-            .spawn()?,
-    );
-    let proc = children.back_mut().unwrap(); // just pushed
-    let ohandle = proc
-        .stdin
-        .as_mut()
-        .ok_or(error("failed to capture child process stdin"))?;
-
-    let mut hit_delim;
-    while {
-        let buf = ihandle.fill_buf()?;
-        let mut itr = buf.splitn(2, |&c| c == delim);
-        let dump = itr
-            .next()
-            .ok_or(error("split didn't return a single value"))?;
-        hit_delim = itr.next().is_some();
-        ohandle.write_all(dump)?;
-        let size = dump.len();
-        ihandle.consume(size + (hit_delim as usize));
-        !hit_delim && size > 0
-    } {}
-
-    Ok(hit_delim)
 }
 
 fn main() {
@@ -168,33 +100,13 @@ fn main() {
     // ---------
     let stdin = io::stdin();
     let mut ihandle = stdin.lock();
-    let mut children: VecDeque<Child> = VecDeque::with_capacity(max_parallel);
-
-    while {
-        match spawn_child(
-            Command::new(command).args(args.iter()),
-            &mut ihandle,
-            delim,
-            &mut children,
-            max_parallel,
-        ) {
-            Ok(cont) => cont,
-            Err(err) => {
-                cleanup(&mut children);
-                panic!("problem spawning process: {}", err)
-            }
-        }
-    } {}
-
-    // wait for all processes
-    if let Err(err) = children
-        .iter_mut()
-        .map(wait_proc)
-        .collect::<Result<(), _>>()
-    {
-        cleanup(&mut children);
-        panic!("problem waiting for process: {}", err)
-    }
+    xstream_util::xstream(
+        Command::new(command).args(args.iter()),
+        &mut ihandle,
+        delim,
+        max_parallel,
+    )
+    .unwrap();
 }
 
 #[cfg(test)]
