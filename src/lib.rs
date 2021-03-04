@@ -7,7 +7,7 @@
 
 mod pool;
 use pool::Pool;
-use std::borrow::BorrowMut;
+use std::borrow::{Borrow, BorrowMut};
 use std::io::{BufRead, Error, ErrorKind, Result, Write};
 use std::process::{Command, Stdio};
 
@@ -23,7 +23,7 @@ use std::process::{Command, Stdio};
 pub fn xstream(
     mut command: impl BorrowMut<Command>,
     ihandle: &mut impl BufRead,
-    delim: u8,
+    delim: impl Borrow<[u8]>,
     max_parallel: usize,
 ) -> Result<()> {
     let mut pool = Pool::new(max_parallel);
@@ -31,6 +31,7 @@ pub fn xstream(
         .borrow_mut()
         .stdin(Stdio::piped())
         .stdout(Stdio::inherit());
+    let delim = delim.borrow();
 
     while {
         let proc = pool.spawn(command)?;
@@ -39,19 +40,30 @@ pub fn xstream(
             "failed to capture child process stdin",
         ))?;
 
-        let mut hit_delim;
+        let mut new_process;
         while {
             let buf = ihandle.fill_buf()?;
-            let mut itr = buf.splitn(2, |&c| c == delim);
-            let dump = itr.next().unwrap(); // always get one
-            hit_delim = itr.next().is_some();
-            ohandle.write_all(dump)?;
-            let size = dump.len();
-            ihandle.consume(size + (hit_delim as usize));
-            !hit_delim && size > 0
+            // TODO this takes worst case |buf| * |delim| when it only needs to take |buf|, but I
+            // couln't find a builtin method to do it
+            let (to_write, hit_delim) = match buf.windows(delim.len()).position(|w| w == delim) {
+                // impossible to match delim
+                _ if buf.len() < delim.len() => (buf.len(), false),
+                // no match, write we can to guarantee we didn't write part of a match
+                None => (buf.len() - delim.len() + 1, false),
+                // matched write up to match, consume the match
+                Some(pos) => (pos, true),
+            };
+            new_process = hit_delim;
+            ohandle.write_all(&buf[..to_write])?;
+            ihandle.consume(if hit_delim {
+                to_write + delim.len()
+            } else {
+                to_write
+            });
+            !hit_delim && to_write > 0
         } {}
 
-        hit_delim
+        new_process
     } {}
 
     pool.join()

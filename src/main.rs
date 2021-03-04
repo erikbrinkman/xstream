@@ -5,20 +5,47 @@
 use std::convert::TryInto;
 use std::io;
 use std::process::Command;
+use std::str;
 use xstream_util;
 
 use clap::{App, Arg};
 
-/// Parse a string as a single character
-fn parse_character(char_str: &str) -> Result<char, &str> {
-    match char_str {
-        "" | "\\0" => Ok('\0'),
-        "\\t" => Ok('\t'),
-        "\\r" => Ok('\r'),
-        "\\n" => Ok('\n'),
-        "\\\\" => Ok('\\'),
-        string if string.len() == 1 => Ok(string.as_bytes()[0] as char),
-        _ => Err("could not interpret string as a character"),
+/// Escape delimiters in a string
+///
+/// The empty string becomes the null delimiter.
+fn unescape_delimiter(char_str: &str) -> String {
+    if char_str.is_empty() {
+        String::from("\0")
+    } else {
+        let mut res = String::with_capacity(char_str.len());
+        let mut chars = char_str.chars();
+        while let Some(c) = chars.next() {
+            match c {
+                '\\' => {
+                    let next = match chars.next() {
+                        None => '/',
+                        Some('0') => '\0',
+                        Some('a') => '\u{07}',
+                        Some('b') => '\u{08}',
+                        Some('v') => '\u{0B}',
+                        Some('f') => '\u{0C}',
+                        Some('n') => '\n',
+                        Some('r') => '\r',
+                        Some('t') => '\t',
+                        Some('e') | Some('E') => '\u{1B}',
+                        Some('\\') => '\\',
+                        Some(c) => {
+                            // otherwise don't consume the escape
+                            res.push('\\');
+                            c
+                        }
+                    };
+                    res.push(next)
+                }
+                _ => res.push(c),
+            };
+        }
+        res
     }
 }
 
@@ -32,8 +59,9 @@ fn main() {
                 .short("d")
                 .long("delimiter")
                 .help(
-                    "Set the delimiter between inputs. \
-                     This also accepts {\\0, \\t, \\r, \\n, and \\\\}.",
+                    "Set the delimiter between inputs. This will unescape common backslash escape \
+                    sequences (0, a, b, v, f, n, r, t, e, and \\). The empty string will be \
+                    treated as the null delimiter.",
                 )
                 .default_value("\\n"),
         )
@@ -41,10 +69,7 @@ fn main() {
             Arg::with_name("null")
                 .short("0")
                 .long("null")
-                .help(
-                    "Input streams are delimited by null characters (\\0) \
-                     instead of new lines.",
-                )
+                .help("Input streams are delimited by null characters (\\0) instead of new lines.")
                 .conflicts_with("delim"),
         )
         .arg(
@@ -62,9 +87,9 @@ fn main() {
                 .required(true)
                 .multiple(true)
                 .help(
-                    "The command to execute for each delimited stream. \
-                     It is often helpful to prefix this with \"--\" so that \
-                     other arguments are not interpreted by xstream.",
+                    "The command to execute for each delimited stream. It is often helpful to \
+                    prefix this with \"--\" so that other arguments are not interpreted by \
+                    xstream.",
                 ),
         )
         .after_help(
@@ -78,18 +103,18 @@ fn main() {
     // ----------------------------
     // Parse command line arguments
     // ----------------------------
-    let mut command_iter = matches.values_of("command").expect("command is required");
-    let command = command_iter.next().expect("command is required");
+    let mut command_iter = matches.values_of("command").unwrap(); // required
+    let command = command_iter.next().unwrap(); // required
     let args: Vec<&str> = command_iter.collect();
     let delim_str = if matches.is_present("null") {
         ""
     } else {
-        matches.value_of("delim").expect("delim has default value")
+        matches.value_of("delim").unwrap() // required
     };
-    let delim = parse_character(&delim_str).expect("invalid delimiter") as u8;
+    let delim = unescape_delimiter(&delim_str);
     let max_parallel: usize = matches
         .value_of("parallel")
-        .expect("parallel has default value")
+        .unwrap() // required
         .parse::<i64>()
         .expect("couldn't parse parallel as integer")
         .try_into()
@@ -103,7 +128,7 @@ fn main() {
     xstream_util::xstream(
         Command::new(command).args(args.iter()),
         &mut ihandle,
-        delim,
+        delim.as_bytes(),
         max_parallel,
     )
     .unwrap();
@@ -111,30 +136,30 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_character;
+    use super::unescape_delimiter;
 
     #[test]
     fn parse_empty() {
-        assert_eq!(parse_character(""), Ok('\0'));
+        assert_eq!(unescape_delimiter(r""), "\0");
     }
 
     #[test]
     fn parse_null_escape() {
-        assert_eq!(parse_character("\\0"), Ok('\0'));
+        assert_eq!(unescape_delimiter(r"\0"), "\0");
     }
 
     #[test]
     fn parse_newline_escape() {
-        assert_eq!(parse_character("\\n"), Ok('\n'));
+        assert_eq!(unescape_delimiter(r"\n"), "\n");
     }
 
     #[test]
     fn parse_newline_raw() {
-        assert_eq!(parse_character("\n"), Ok('\n'));
+        assert_eq!(unescape_delimiter("\n"), "\n");
     }
 
     #[test]
-    fn parse_extra() {
-        assert!(parse_character("\n ").is_err());
+    fn parse_extra_space() {
+        assert_eq!(unescape_delimiter("\n "), "\n ");
     }
 }

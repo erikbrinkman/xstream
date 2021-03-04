@@ -42,9 +42,3 @@ which on my system gives:
 | `xargs`   | 17.26 |   3.98 | 0:18.01 |
 
 This benchmark is a toy example, but `xstream` already provides a 60% speed up when each stream is only 50k.
-
-## To Do
-
-- [ ] This currently only support single byte delimiters, but it shouldn't be too difficult to support multi-byte delimiters.
-      After storing the delimiter, finding it should work with `buf.windows().position(|&s| s == delim`.
-      The tricky part will be not writing the last `delim.len()` bytes in case the first part of delim is in them, but making sure that we do flush them if we've finished a stream.
