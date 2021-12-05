@@ -1,6 +1,6 @@
 [package]
 name = "xstream-util"
-version = "1.2.0"
+version = "1.2.1"
 authors = ["Erik Brinkman <erik.brinkman@gmail.com>"]
 readme = "README.md"
 homepage = "https://github.com/erikbrinkman/xstream"
@@ -8,7 +8,7 @@ documentation = "https://docs.rs/xstream-util"
 repository = "https://github.com/erikbrinkman/xstream"
 license = "MIT"
 description = "A command line tool to split a stream to child processes"
-edition = "2018"
+edition = "2021"
 
 [lib]
 name = "xstream_util"
@@ -19,4 +19,4 @@ path = "src/main.rs"
 doc = false
 
 [dependencies]
-clap = "^2.33"
+clap = "^2.34"
