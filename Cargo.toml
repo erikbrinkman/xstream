@@ -11,6 +11,7 @@ description = "A command line tool to split a stream to child processes"
 edition = "2021"
 
 [features]
+default = [ "binary" ]
 binary = ["clap"]
 
 [dependencies]
