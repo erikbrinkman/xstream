@@ -10,7 +10,7 @@ A command line tool to split a stream by a delimiter and pipe each section to a 
 ## Installation
 
 ```
-cargo install xstream-util
+cargo install xstream-util --features=binary
 ```
 
 ## Benchmarks
@@ -36,9 +36,9 @@ and `xargs` as
 
 which on my system gives:
 
-|  Program  | User  | System | Elapsed |
-|-----------|-------|--------|---------|
-| `xstream` |  6.55 |   1.53 | 0:06.91 |
-| `xargs`   | 17.26 |   3.98 | 0:18.01 |
+|  Program  |  User  | System | Elapsed |
+|-----------|--------|--------|---------|
+| `xstream` | 10.21s |  1.67s | 0:09.58 |
+| `xargs`   | 15.72s |  2.85s | 0:14.52 |
 
-This benchmark is a toy example, but `xstream` already provides a 60% speed up when each stream is only 50k.
+This benchmark is a toy example, but `xstream` already provides a 30% speed up when each stream is only 50k.

@@ -10,6 +10,12 @@ license = "MIT"
 description = "A command line tool to split a stream to child processes"
 edition = "2021"
 
+[features]
+binary = ["clap"]
+
+[dependencies]
+clap = { version = "^3.2.12", features = [ "derive" ], optional = true }
+
 [lib]
 name = "xstream_util"
 
@@ -17,6 +23,5 @@ name = "xstream_util"
 name = "xstream"
 path = "src/main.rs"
 doc = false
+required-features = [ "binary" ]
 
-[dependencies]
-clap = { version = "^3.2.12", features = [ "derive" ] }
