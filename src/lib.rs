@@ -35,10 +35,10 @@ pub fn xstream(
 
     while {
         let proc = pool.spawn(command)?;
-        let ohandle = proc.stdin.as_mut().ok_or(Error::new(
-            ErrorKind::Other,
-            "failed to capture child process stdin",
-        ))?;
+        let ohandle = proc
+            .stdin
+            .as_mut()
+            .ok_or_else(|| Error::new(ErrorKind::Other, "failed to capture child process stdin"))?;
 
         let mut new_process;
         while {

@@ -95,12 +95,12 @@ impl Pool {
 impl Drop for Pool {
     fn drop(&mut self) {
         // kill any children left in self
-        let _ = self
-            .procs
-            .iter_mut()
-            .map(Child::kill)
-            .collect::<Result<()>>();
+        for proc in &mut self.procs {
+            let _ = proc.kill();
+        }
         // wait for them to be cleaned up
-        let _ = self.procs.iter_mut().map(wait_proc).collect::<Result<()>>();
+        for proc in &mut self.procs {
+            let _ = wait_proc(proc);
+        }
     }
 }
