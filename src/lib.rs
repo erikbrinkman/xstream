@@ -4,6 +4,7 @@
 //! current not any async support, and therefore no real way to interact with the processes
 //! afterwards. Event collecting the output would require effort / synchronization, so currently
 //! they're all just piped to the standard inhereted buffers.
+#![warn(missing_docs)]
 
 mod pool;
 use pool::Pool;
