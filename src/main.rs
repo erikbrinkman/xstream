@@ -103,7 +103,7 @@ fn main() {
 }
 
 #[cfg(test)]
-mod tests {
+mod escape_tests {
     use super::unescape_delimiter;
 
     #[test]
@@ -124,5 +124,16 @@ mod tests {
     #[test]
     fn parse_extra_space() {
         assert_eq!(unescape_delimiter("\n "), "\n ");
+    }
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::Args;
+    use clap::CommandFactory;
+
+    #[test]
+    fn test_cli() {
+        Args::command().debug_assert()
     }
 }
