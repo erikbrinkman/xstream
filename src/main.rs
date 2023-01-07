@@ -91,11 +91,9 @@ fn main() {
         unescape_delimiter(args.delimiter)
     };
 
-    let stdin = io::stdin();
-    let mut ihandle = stdin.lock();
     xstream_util::xstream(
         Command::new(args.command).args(args.args.iter()),
-        &mut ihandle,
+        &mut io::stdin().lock(),
         delim.as_bytes(),
         args.parallel,
     )
