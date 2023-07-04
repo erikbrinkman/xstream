@@ -348,7 +348,7 @@ checksum = "1a515f5799fe4961cb532f983ce2b23082366b898e52ffbce459c86f67c8378a"
 
 [[package]]
 name = "xstream-util"
-version = "1.3.2"
+version = "1.3.3"
 dependencies = [
  "clap",
 ]
