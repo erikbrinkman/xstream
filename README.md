@@ -7,6 +7,9 @@
 
 A command line tool to split a stream by a delimiter and pipe each section to a child process.
 
+Each chunk can be piped to a new process, with limited parallelism, or for
+embarassingly parallel processing, processes can be reused.
+
 ## Installation
 
 ```
@@ -20,14 +23,14 @@ For a simple illustration of the speed up for reasonably sized streams, the foll
 First, generate a null delimited set of streams with
 
 ```bash
-time for I in {10000..11000}; do seq $I; echo -ne '\0'; done
+time for I in {10000..11000}; do seq $I; echo -ne '0\0'; done
 ```
 
 This stream is roughly 50M, making each stream roughly 50k.
 
 I then piped this into `xstream` as
 ```bash
-| time xstream -0 -- bash -c 'paste -sd+ | bc' > /dev/null
+| time xstream -0 -w '' -- bash -c 'paste -sd+ | bc' > /dev/null
 ```
 and `xargs` as
 ```bash

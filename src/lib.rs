@@ -1,71 +1,92 @@
 //! xstream library
 //!
-//! Provides a command to take a BufRead and split it as input among several processes. There's
-//! current not any async support, and therefore no real way to interact with the processes
-//! afterwards. Event collecting the output would require effort / synchronization, so currently
+//! Provides [[xstream]] to take a `BufRead` and splits it as input among several processes.
+//! There's current not any async support, and therefore no real way to interact with the processes
+//! afterwards. Even collecting the output would require effort / synchronization, so currently
 //! they're all just piped to the standard inhereted buffers.
+//!
+//! # Usage
+//!
+//! ```
+//! use std::process::Command;
+//! use xstream_util::Limiting;
+//! # use std::io::BufReader;
+//!
+//! let mut input = // ...
+//! # BufReader::new(&[0_u8; 0][..]);
+//! // Spawn up to two `cat` processes, could also use `Rotating`
+//! let mut pool = Limiting::new(Command::new("cat"), 2);
+//! xstream_util::xstream(&mut pool, &mut input, &b"\n", &None::<&[u8]>).unwrap();
+//! ```
 #![warn(missing_docs)]
+#![warn(clippy::pedantic)]
 
+mod limit;
 mod pool;
-use pool::Pool;
-use std::borrow::{Borrow, BorrowMut};
-use std::io::{BufRead, Error, ErrorKind, Result, Write};
-use std::process::{Command, Stdio};
+mod rot;
 
-/// stream one reader into several independent processes
+pub use limit::Limiting;
+pub use pool::{Error, Pool};
+pub use rot::Rotating;
+use std::io::{BufRead, Write};
+
+/// Stream one reader into several independent processes
 ///
-/// ihandle will be delimited by delim, each section will be piped as stdin to a new command. Up to
-/// max_parallel processes will exist at any one time, however if the commands are io intensive or
-/// the buffer being piped to each command is long than there won't be much parallelization as this
-/// must finish sending a section to a process before it will spin up another. This prevents excess
-/// memory consumption, but will be slower than max parallelization.
+/// `in_handle` will be delimited by `delim`, each section will be piped as stdin to a command spawned from `pool`.
 ///
-/// Set max parallel to 0 to enable full parallelization.
+/// # Notes
+///
+/// If the commands are io intensive or the buffer being piped to each command is long than there
+/// won't be much parallelization as this must finish sending a section to a process before it will
+/// spin up another.
+///
+/// # Errors
+///
+/// If there are problems spawning processes, the processes themselves fail, or there are problems
+/// reading or writing to the available readers / writers.
 pub fn xstream(
-    mut command: impl BorrowMut<Command>,
-    ihandle: &mut impl BufRead,
-    delim: impl Borrow<[u8]>,
-    max_parallel: usize,
-) -> Result<()> {
-    let mut pool = Pool::new(max_parallel);
-    let command = command
-        .borrow_mut()
-        .stdin(Stdio::piped())
-        .stdout(Stdio::inherit());
-    let delim = delim.borrow();
+    pool: &mut impl Pool,
+    in_handle: &mut impl BufRead,
+    delim: impl AsRef<[u8]>,
+    write_delim: &Option<impl AsRef<[u8]>>,
+) -> Result<(), Error> {
+    let delim = delim.as_ref();
 
-    while {
-        let proc = pool.spawn(command)?;
-        let ohandle = proc
-            .stdin
-            .as_mut()
-            .ok_or_else(|| Error::new(ErrorKind::Other, "failed to capture child process stdin"))?;
+    while !in_handle.fill_buf().map_err(Error::Input)?.is_empty() {
+        let proc = pool.get()?;
+        let out_handle = proc.stdin.as_mut().ok_or(Error::StdinNotPiped)?;
 
-        let mut new_process;
         while {
-            let buf = ihandle.fill_buf()?;
-            // TODO this takes worst case |buf| * |delim| when it only needs to take |buf|, but I
-            // couln't find a builtin method to do it
-            let (to_write, hit_delim) = match buf.windows(delim.len()).position(|w| w == delim) {
-                // impossible to match delim
-                _ if buf.len() < delim.len() => (buf.len(), false),
-                // no match, write we can to guarantee we didn't write part of a match
-                None => (buf.len() - delim.len() + 1, false),
+            let buf = in_handle.fill_buf().map_err(Error::Input)?;
+            let (consume, hit_delim) = match buf.windows(delim.len()).position(|w| w == delim) {
+                // no match
+                None => (
+                    if buf.len() < delim.len() {
+                        // buffer can never contain the match, so dump the rest
+                        buf.len()
+                    } else {
+                        // write we can to guarantee we didn't write part of a match
+                        buf.len() - delim.len() + 1
+                    },
+                    false,
+                ),
                 // matched write up to match, consume the match
-                Some(pos) => (pos, true),
+                Some(pos) => (pos + delim.len(), true),
             };
-            new_process = hit_delim;
-            ohandle.write_all(&buf[..to_write])?;
-            ihandle.consume(if hit_delim {
-                to_write + delim.len()
+            if let (Some(wdel), true) = (write_delim, hit_delim) {
+                out_handle
+                    .write_all(&buf[..consume - delim.len()])
+                    .map_err(Error::Output)?;
+                out_handle.write_all(wdel.as_ref()).map_err(Error::Output)?;
             } else {
-                to_write
-            });
-            !hit_delim && to_write > 0
+                out_handle
+                    .write_all(&buf[..consume])
+                    .map_err(Error::Output)?;
+            }
+            in_handle.consume(consume);
+            !hit_delim && consume > 0
         } {}
-
-        new_process
-    } {}
+    }
 
     pool.join()
 }

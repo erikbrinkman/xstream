@@ -1,106 +1,68 @@
-//! Simple command process pool
-//!
-//! This is a simple pool to manage limiting the number of spawned processes, and manage cleanup so
-//! there are no zombie processes. To effectively manage cleanup, this needs to be dropped, so
-//! panics while using this may result in zombie processes
-use std::collections::VecDeque;
-use std::io::{Error, ErrorKind, Result};
-use std::process::{Child, Command, ExitStatus};
+//! A trait for a generic process pool used by xstream
+use std::borrow::BorrowMut;
+use std::error;
+use std::fmt;
+use std::fmt::{Display, Formatter};
+use std::io;
+use std::process::Child;
 
-/// A pool to manage spawning a limited number of processses
+/// Internal function to wait for a process
 ///
-/// This design is simple and will wait for the old scheduled process to complete before scheduling
-/// a new one. If you schedule a long running process, then a bunch of short ones, it won't
-/// schedule more short ones beyond the buffer until the long one has finished.
-#[derive(Debug)]
-pub struct Pool {
-    procs: VecDeque<Child>,
-    max_procs: usize,
-}
-
-fn parse_code(status: ExitStatus) -> Result<()> {
+/// This will error in the event that it doesn't complete successfully (non-zero error code or
+/// otherwise)
+pub fn wait_proc(mut proc: impl BorrowMut<Child>) -> Result<(), Error> {
+    let status = proc.borrow_mut().wait().map_err(Error::Wait)?;
     match status.code() {
         Some(0) => Ok(()),
-        Some(code) => Err(Error::new(
-            ErrorKind::Other,
-            format!("child process finished with nonzero exit code: {}", code),
-        )),
-        None => Err(Error::new(
-            ErrorKind::Other,
-            "child process was killed by a signal",
-        )),
+        Some(code) => Err(Error::NonZeroExitCode(code)),
+        None => Err(Error::KilledBySignal),
     }
 }
 
-/// internal function to wait for a process and error in the event that it doesn't complete
-/// successfully (non-zero error code or otherwise)
-fn wait_proc(proc: &mut Child) -> Result<()> {
-    parse_code(proc.wait()?)
+/// An error raised by `xstream`
+#[non_exhaustive]
+#[derive(Debug)]
+pub enum Error {
+    /// The stdin to a child process wasn't piped
+    StdinNotPiped,
+    /// One of the spawned processes was killed by a signal
+    KilledBySignal,
+    /// One of the spawned processes returned a non-zero exit code
+    NonZeroExitCode(i32),
+    /// An error occured while trying to read from the input
+    Input(io::Error),
+    /// An error occured while trying to write to a child process
+    Output(io::Error),
+    /// An error occured while trying to spawn a child process
+    Spawn(io::Error),
+    /// An error occured while trying to wait for a child process
+    Wait(io::Error),
 }
 
-impl Pool {
-    /// Create a new empty pool with a limited number of total processes
-    ///
-    /// Set max_procs to 0 to enable unbounded parallelism.
-    pub fn new(max_procs: usize) -> Pool {
-        Pool {
-            procs: VecDeque::new(),
-            max_procs,
-        }
-    }
-
-    /// Spawn a new process with command and return a mutable reference to the process
-    ///
-    /// This command will block until it can schedule the process under the constraints. It can
-    /// fail for any reason, including an earlier process failed, and never actually spawn the
-    /// process in question. If it does successfully spawn the process, it will be recorded so that
-    /// it will be cleaned up if the pool is dropped.
-    pub fn spawn(&mut self, command: &mut Command) -> Result<&mut Child> {
-        // check if early processes have finished and clean them up
-        while let Some(proc) = self.procs.front_mut() {
-            match proc.try_wait()? {
-                Some(status) => {
-                    parse_code(status)?;
-                    self.procs.pop_front();
-                }
-                None => break,
-            }
-        }
-
-        // next wait for oldest proc to finish if we're full
-        if self.procs.len() == self.max_procs {
-            if let Some(mut proc) = self.procs.pop_front() {
-                wait_proc(&mut proc)?
-            }
-        };
-
-        // now schedule new process
-        self.procs.push_back(command.spawn()?);
-        Ok(self.procs.back_mut().unwrap()) // just pushed
-    }
-
-    /// wait for all processes to finish
-    ///
-    /// Errors will terminate early and not wait for reamining processes to finish. To continue
-    /// waiting for them anyway you can continue to call join until you get a success, this will
-    /// indicate that there are no more running processes under management by the pool.
-    pub fn join(&mut self) -> Result<()> {
-        while let Some(mut proc) = self.procs.pop_front() {
-            wait_proc(&mut proc)?
-        }
-        Ok(())
+impl Display for Error {
+    fn fmt(&self, fmt: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        write!(fmt, "{self:?}")
     }
 }
 
-impl Drop for Pool {
-    fn drop(&mut self) {
-        // kill any children left in self
-        for proc in &mut self.procs {
-            let _ = proc.kill();
-        }
-        // wait for them to be cleaned up
-        for proc in &mut self.procs {
-            let _ = wait_proc(proc);
-        }
-    }
+impl error::Error for Error {}
+
+/// A type that can `get` child processes on demand
+pub trait Pool {
+    /// Fetch a process from the pool
+    ///
+    /// Depending on the type of `Pool`, this may spawn a new process or just return one that is
+    /// already running.
+    ///
+    /// # Errors
+    ///
+    /// When anything goes wrong when trying to create a new process.
+    fn get(&mut self) -> Result<&mut Child, Error>;
+
+    /// Wait for all spawned processes to complete successfully
+    ///
+    /// # Errors
+    ///
+    /// When anything goes wrong when waiting for a process, including non-zero exit codes.
+    fn join(&mut self) -> Result<(), Error>;
 }
