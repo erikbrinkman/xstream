@@ -45,3 +45,7 @@ which on my system gives:
 | `xargs`   | 15.72s |  2.85s | 0:14.52 |
 
 This benchmark is a toy example, but `xstream` already provides a 30% speed up when each stream is only 50k.
+
+## Other tools
+
+- You may also be interested in [`xstdin`](https://github.com/patte/xstdin-rs), which is possibly more performant for the specific task of splitting a large input among several long running processes.
