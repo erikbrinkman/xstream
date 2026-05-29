@@ -48,7 +48,7 @@ impl<C: BorrowMut<Command>> Pool for Limiting<C> {
         // wait for the oldest process if we're bounded
         if self.max_procs != 0 && self.procs.len() == self.max_procs {
             pool::wait_proc(self.procs.pop_front().unwrap())?;
-        };
+        }
 
         // now schedule new process
         let proc = self.command.borrow_mut().spawn().map_err(Error::Spawn)?;
