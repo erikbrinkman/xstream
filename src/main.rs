@@ -42,7 +42,7 @@ fn unescape_delimiter(char_ref: impl AsRef<str>) -> String {
                 res.push(next);
             }
             _ => res.push(c),
-        };
+        }
     }
     res
 }
@@ -154,6 +154,6 @@ mod cli_tests {
 
     #[test]
     fn test_cli() {
-        Cli::command().debug_assert()
+        Cli::command().debug_assert();
     }
 }
